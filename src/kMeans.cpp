@@ -49,27 +49,27 @@ void cpuKMeans(const BRG_IMAGE & image, uint cols, uint rows, uint * initialFeat
 {
     BRG * kMeans = new BRG[K];
     
-    std::cout << "Image" << std::endl;
+ //   std::cout << "Image" << std::endl;
 
     for(int i = 0; i < K ; i++)
     {
         uint initCol = initialFeaturePos[2 * i];
         uint initRow = initialFeaturePos[2 * i + 1];
-        std::cout << initCol + initRow * cols << std::endl;
+
         kMeans[i].b = image.b[initCol + initRow * cols];
         kMeans[i].r = image.r[initCol + initRow * cols];
         kMeans[i].g = image.g[initCol + initRow * cols];
     }
-    
+   
     std::cout << "KMeans : " << std::endl;
-    for(int i = 0; i < K; i++)
+    for(int i = 0; i< K ; i++)
     {
         std::cout << kMeans[i] << std::endl;
-    }
+    } 
 
     int length = cols * rows;
 
-    for(int pixelId = 0; pixelId < 1; pixelId++)
+    for(int pixelId = 0; pixelId < length; pixelId++)
     {
         BRG pixel;
 
@@ -83,16 +83,9 @@ void cpuKMeans(const BRG_IMAGE & image, uint cols, uint rows, uint * initialFeat
         {
             BRG kVal = kMeans[k];
             distances.push_back((pixel - kVal)^2);                
-            std::cout << " k = " << k << std::endl;
-            std::cout << (int) pixel.g << " - " << (int) kVal.g << std::endl;
-            std::cout << (int) pixel.r << " - " << (int) kVal.r << std::endl;
-            std::cout << (int) pixel.b << " - " << (int) kVal.b << std::endl;
-
-            std::cout << ((pixel - kVal)^2) << std::endl;
         }
-        
+
         int maxK = std::distance(distances.begin(), std::min_element(distances.begin(), distances.end()));
-    
 
         output.b[pixelId] = kMeans[maxK].b; 
         output.r[pixelId] = kMeans[maxK].r; 
@@ -100,25 +93,26 @@ void cpuKMeans(const BRG_IMAGE & image, uint cols, uint rows, uint * initialFeat
     }
 }
 
-void processImage(const BRG_IMAGE & image, uint cols, uint rows, BRG_IMAGE & outputImage)
+bool processImage(const BRG_IMAGE & image, uint cols, uint rows, BRG_IMAGE & outputImage)
 {
-//    uint initialFeaturePos[] = {647, 793, 1661,1019, 362,939};
-    uint initialFeaturePos[] = {3 ,2, 1, 2};
-    uint K = 2;
+    //uint initialFeaturePos[] = {647, 793, 1661,1019, 362,939};
+    uint initialFeaturePos[] = {647, 793, 1661,1019, 362,939};
+    //uint initialFeaturePos[] = {2 ,1, 0, 1};
+    uint K = 3;
 
     if((sizeof(initialFeaturePos)/sizeof(uint))/(K*2) != 1 || (sizeof(initialFeaturePos)/sizeof(uint))%(K*2) != 0)
     {
         std::cerr << "Mismatch in K and intial features, K : " << K << ", initial feature count : " << ((float)sizeof(initialFeaturePos))/sizeof(uint)/(K*2)  << std::endl;
-        return;
+        return false;
     }
 
     for(int i = 0; i< K ; i++)
     {
-        if(initialFeaturePos[i * 2] > cols || initialFeaturePos[i * 2 + 1] > rows)
+        if(initialFeaturePos[i * 2] >= cols || initialFeaturePos[i * 2 + 1] >= rows)
         {
             std::cerr << "initial Positions out of bound, initial positions : (" 
                 << initialFeaturePos[i * 2] << ", " << initialFeaturePos[i * 2 + 1] << ") , size : (" << cols << ", " << rows << ")" << std::endl;
-            return;
+            return false;
         }
     }
 
@@ -137,6 +131,8 @@ void processImage(const BRG_IMAGE & image, uint cols, uint rows, BRG_IMAGE & out
     cpuKMeans(image, cols, rows, initialFeaturePos, K, cpuOut);
 
     outputImage = cpuOut;
+
+    return true;
         
 } 
 
@@ -144,7 +140,7 @@ int main()
 {
     try
     {
-        Mat src = imread("/x01/bhashithaa/image/src/temp.jpg", IMREAD_COLOR);
+        Mat src = imread("/x01/bhashithaa/image/src/circles.jpg", IMREAD_COLOR);
         Mat matbrg[3];
 
         if(src.empty())
@@ -159,10 +155,6 @@ int main()
 
         split(src, matbrg);
 
-        std::cout << matbrg[0] << std::endl;
-        std::cout << matbrg[1] << std::endl;
-        std::cout << matbrg[2] << std::endl;
-  
         BRG_IMAGE brg;
 
         brg.b = matbrg[BLUE_INDEX].data;
@@ -175,7 +167,8 @@ int main()
 
         BRG_IMAGE outputImage;
 
-        processImage(brg, cols, rows, outputImage); 
+        if(!processImage(brg, cols, rows, outputImage)) 
+            return -1;
 
         Mat outputIM[3];
         outputIM[0] = Mat(rows, cols, CV_8UC1, outputImage.b);

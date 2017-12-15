@@ -1,13 +1,13 @@
 clear all;
 close all;
 
-inputImage = imread('temp.jpg');
+inputImage = imread('circles.jpg');
 
 %InitialPoints = [980,75; 475, 483;  950, 485];
 %InitialPoints = [980,75; 475, 483; 950, 485;  743, 776];
 %InitialPoints = [647, 793; 1661,1019; 362,939];
-%InitialPoints = fliplr([647, 793; 1661,1019; 362,939]);
-InitialPoints = fliplr([3 2; 1 2]);
+InitialPoints = fliplr([647, 793; 1661,1019; 362,939]) + 1;
+%InitialPoints = fliplr([3 2; 1 2]);
 
 KPointCount = size(InitialPoints,1);
 
