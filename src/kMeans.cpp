@@ -49,48 +49,121 @@ void cpuKMeans(const BRG_IMAGE & image, uint cols, uint rows, uint * initialFeat
 {
     BRG * kMeans = new BRG[K];
     
- //   std::cout << "Image" << std::endl;
+    memset(kMeans, 0, sizeof(BRG) * K);
+
+    int * tempR = new int[K];
+    int * tempG = new int[K];
+    int * tempB = new int[K];
+
+    int * occur = new int[K];
 
     for(int i = 0; i < K ; i++)
     {
         uint initCol = initialFeaturePos[2 * i];
         uint initRow = initialFeaturePos[2 * i + 1];
 
-        kMeans[i].b = image.b[initCol + initRow * cols];
-        kMeans[i].r = image.r[initCol + initRow * cols];
-        kMeans[i].g = image.g[initCol + initRow * cols];
+        tempB[i] = image.b[initCol + initRow * cols];
+        tempR[i] = image.r[initCol + initRow * cols];
+        tempG[i] = image.g[initCol + initRow * cols];
     }
-   
-    std::cout << "KMeans : " << std::endl;
-    for(int i = 0; i< K ; i++)
+
+
+    for(int i = 0; i < K; i++) 
+        occur[i] = 1;
+    
+ //   std::cout << "Image" << std::endl;
+    int iterations = 1;
+
+    while(true && iterations < 10)
     {
-        std::cout << kMeans[i] << std::endl;
-    } 
+        bool isSteadyState = true;
 
-    int length = cols * rows;
-
-    for(int pixelId = 0; pixelId < length; pixelId++)
-    {
-        BRG pixel;
-
-        pixel.r = image.r[pixelId];
-        pixel.b = image.b[pixelId];
-        pixel.g = image.g[pixelId];
-
-        std::vector<float> distances;
-
-        for(int k = 0; k < K; k++)
+        for(int i = 0; i < K ; i++)
         {
-            BRG kVal = kMeans[k];
-            distances.push_back((pixel - kVal)^2);                
+            if(kMeans[i].g != tempG[i]/occur[i] || kMeans[i].r != tempR[i]/occur[i] || kMeans[i].b != tempB[i]/occur[i])
+            {
+                kMeans[i].g = tempG[i]/occur[i];
+                kMeans[i].r = tempR[i]/occur[i];
+                kMeans[i].b = tempB[i]/occur[i];
+
+                isSteadyState &= false;
+            }
+            else
+            {
+                isSteadyState &= true;  
+            }
         }
 
-        int maxK = std::distance(distances.begin(), std::min_element(distances.begin(), distances.end()));
+        if(isSteadyState)
+            break;
 
-        output.b[pixelId] = kMeans[maxK].b; 
-        output.r[pixelId] = kMeans[maxK].r; 
-        output.g[pixelId] = kMeans[maxK].g; 
+        for(int c = 0; c < K; c++)
+        {
+            tempR[c]= 0;
+            tempG[c]= 0;
+            tempB[c]= 0;
+
+            occur[c]= 0;
+        }
+       
+        std::cout << "KMeans : " << std::endl;
+        for(int i = 0; i< K ; i++)
+        {
+            std::cout << kMeans[i] << std::endl;
+        } 
+
+        int length = cols * rows;
+
+        for(int pixelId = 0; pixelId < length; pixelId++)
+        {
+            BRG pixel;
+
+            pixel.r = image.r[pixelId];
+            pixel.b = image.b[pixelId];
+            pixel.g = image.g[pixelId];
+
+            std::vector<float> distances;
+
+            for(int k = 0; k < K; k++)
+            {
+                BRG kVal = kMeans[k];
+                distances.push_back((pixel - kVal)^2);                
+            }
+
+            int maxK = std::distance(distances.begin(), std::min_element(distances.begin(), distances.end()));
+
+            if(maxK == 5)
+            {
+                std::cout << pixelId << ", " << pixel << ", ";
+                for(const auto & it : distances)
+                    std::cout << it << ", ";
+                std::cout << std::endl;
+            }
+
+            tempR[maxK] += pixel.r;
+            tempG[maxK] += pixel.g;
+            tempB[maxK] += pixel.b;
+
+            occur[maxK]++;
+
+            output.b[pixelId] = kMeans[maxK].b; 
+            output.r[pixelId] = kMeans[maxK].r; 
+            output.g[pixelId] = kMeans[maxK].g; 
+
+        }
+        iterations++;
     }
+
+        /*if(pixelId == 0)
+        {
+            std::cout << kMeans[maxK] << ", (";
+            for(int r =0; r < K;r++) 
+            {
+                std::cout << kMeans[r] << " - " << ((pixel - kMeans[r])^2) << ", ";
+            }
+            std::cout << " )" << std::endl;
+        }
+            */
 }
 
 bool processImage(const BRG_IMAGE & image, uint cols, uint rows, BRG_IMAGE & outputImage)
@@ -170,6 +243,7 @@ int main()
         if(!processImage(brg, cols, rows, outputImage)) 
             return -1;
 
+        //std::cout << (int)outputImage.b[0] << ", " << (int)outputImage.r[0] << ", " << (int) *outputImage.g << std::endl;
         Mat outputIM[3];
         outputIM[0] = Mat(rows, cols, CV_8UC1, outputImage.b);
         outputIM[1] = Mat(rows, cols, CV_8UC1, outputImage.r);

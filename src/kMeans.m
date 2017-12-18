@@ -22,7 +22,10 @@ for i = 1 : KPointCount
   initialValues(i,:) = inputImage(InitialPoints (i,1), InitialPoints (i,2),:);
 endfor
 
-for iter = 0 : 0 
+while true
+
+  initialValues
+  
   for i = 1 : KPointCount
     imageDistance(:,:,i) =  (double(inputImage(:,:,1)) - double(initialValues(i,1))).^2 + (double(inputImage(:,:,2)) - double(initialValues(i,2))).^2 + (double(inputImage(:,:,3)) - double(initialValues(i,3))).^2;
   endfor
@@ -36,13 +39,18 @@ for iter = 0 : 0
       
   for k = 1 : KPointCount
     for i = 1 : 3     
-      initialValues(k, i) = sum(sum(mask(:,:,k).* double(inputImage(:,:,i)) ))/sum(sum(mask(:,:,k)));
+      tempInitialValues(k, i) = sum(sum(mask(:,:,k).* double(inputImage(:,:,i)) ))/sum(sum(mask(:,:,k)));
     endfor
   endfor
   
+  if(tempInitialValues == initialValues)
+    break;
+  else    
+    initialValues = tempInitialValues;
+  endif
   %printf("After");
   %initialValues
-endfor
+endwhile
 
 maskTot = zeros(xSize,ySize, 3, "uint8");
 
