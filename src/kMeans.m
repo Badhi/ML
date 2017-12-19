@@ -30,6 +30,8 @@ while true
     imageDistance(:,:,i) =  (double(inputImage(:,:,1)) - double(initialValues(i,1))).^2 + (double(inputImage(:,:,2)) - double(initialValues(i,2))).^2 + (double(inputImage(:,:,3)) - double(initialValues(i,3))).^2;
   endfor
 
+  imageDistance(1,1,:)
+  
   minValues = min(imageDistance, [], 3);
 
   mask = (imageDistance == minValues );

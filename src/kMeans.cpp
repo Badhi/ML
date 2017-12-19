@@ -27,15 +27,16 @@ public:
     {
         BRG output;
 
-        output.r = r - val.r;
-        output.g = g - val.g;
-        output.b = b - val.b;
+        output.r = std::abs((int)r - (int)val.r);
+        output.g = std::abs((int)g - (int)val.g);
+        output.b = std::abs((int)b - (int)val.b);
 
         return output;
     }
     float operator^(int exponent)
     {
-       return std::pow((float)b, 2) + std::pow((float)r,2) + std::pow((float)g,2); 
+//        std::cout << "^: " << (float) b << ", " << (float) r << ", " << (float) g << " = " << std::pow((float)b, exponent) + std::pow((float)r,exponent) + std::pow((float)g, exponent) << std::endl;
+       return std::pow((float)b, exponent) + std::pow((float)r,exponent) + std::pow((float)g, exponent); 
     }
 };
 
