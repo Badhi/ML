@@ -33,7 +33,7 @@
 import os
 import ycm_core
 
-flags = ['-I/x01/bhashithaa/opencv/build/include/']
+flags = ['-I/x01/bhashithaa/opencv/build/include/', '-I/usr/local/cuda/targets/x86_64-linux/include/']
 
 
 # Set this to the absolute path to the folder (NOT the file!) containing the

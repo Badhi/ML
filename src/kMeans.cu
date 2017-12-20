@@ -3,9 +3,29 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+#include <cuda_device_runtime_api.h>
+#include <device_launch_parameters.h>
+
 #define BLUE_INDEX 0
 #define RED_INDEX 1
 #define GREEN_INDEX 2
+
+void cudaCheckThrow(const char * file, unsigned line, const char *statement, cudaError_t error)
+{
+    std::string m_error_message;
+
+    if(error == cudaSuccess)
+    {
+        return;
+    }
+
+    throw std::invalid_argument(cudaGetErrorString(error));
+}
+
+#define CHECK_ERROR(value) cudaCheckThrow(__FILE__, __LINE__, #value, value)
 
 using namespace cv;
 
@@ -44,6 +64,126 @@ public:
 {
     os << "[" << (int) c.b << " " << (int) c.r << " " << (int) c.g << "]";
     return os;
+}
+
+__global__ void distanceCalc(BRG_IMAGE d_image, BRG * d_kMeans, uint cols, uint rows, float * output)
+{
+    uint colId = threadIdx.y;
+    uint rowId = threadIdx.x;
+
+    uint K = blockIdx.z;
+
+    if(colId < cols && rowId < rows)
+    {
+        BRG pixel;
+        uint pixelId = rowId * cols + colId;
+        pixel.g = d_image.g[pixelId];
+        pixel.r = d_image.r[pixelId];
+        pixel.b = d_image.b[pixelId];
+
+        output[K * cols * rows + pixelId] = pow(((float) pixel.b - (float) d_kMeans[K].b),2) + pow(((float) pixel.b - (float) d_kMeans[K].b),2) + pow(((float) pixel.b - (float) d_kMeans[K].b),2);
+    }
+}
+
+__global__ void assigner(float * d_distanceBuffer, BRG_IMAGE d_image, BRG * d_kMeans, uint K, uint cols, uint rows, BRG_IMAGE d_output)
+{
+    uint colId = threadIdx.y;
+    uint rowId = threadIdx.x;
+   
+    if(colId < cols && rowId < rows)
+    {
+        uint pixelId = rowId * cols + colId;
+        uint minId = 0;
+        float min = d_distanceBuffer[pixelId];
+
+        for(int i = 1; i < K; i++)
+        {
+            float distanceVal = d_distanceBuffer[i * cols * rows + pixelId];
+            if(distanceVal < min) 
+            {
+                min = distanceVal;
+                minId = i; 
+            }
+        } 
+
+        d_output.b[pixelId] = d_kMeans[minId].b; 
+        d_output.r[pixelId] = d_kMeans[minId].r; 
+        d_output.g[pixelId] = d_kMeans[minId].g; 
+    }
+}
+
+bool gpuAlgo(const BRG_IMAGE & d_image, BRG * & d_kMeans, uint K, uint cols, uint rows, BRG_IMAGE & d_output)
+{
+    float * d_distanceBuffer;
+
+    int length = cols * rows;
+    
+    CHECK_ERROR(cudaMalloc(&d_distanceBuffer, sizeof(float) * cols * rows * K));
+
+    int blockXSize = 32;
+    int blockYSize = 32;
+
+    int gridXSize = (rows%blockXSize == 0) ? rows/blockXSize : rows / blockXSize + 1;
+    int gridYSize = (cols%blockYSize == 0) ? cols/blockYSize : cols / blockYSize + 1;
+    int gridZsize = K;
+
+    dim3 blockSize(blockXSize, blockYSize, 1);
+    dim3 gridSize(gridXSize, gridYSize, gridZsize);
+
+    distanceCalc<<<gridSize, blockSize>>>(d_image, d_kMeans, cols, rows, d_distanceBuffer);
+
+    CHECK_ERROR(cudaGetLastError());
+
+    dim3 blockSize2(blockXSize, blockYSize, 1);
+    dim3 gridSize2(gridXSize, gridYSize, 1);
+
+    assigner<<<gridSize2, blockSize2>>>(d_distanceBuffer, d_image, d_kMeans, K, cols, rows, d_output); 
+    CHECK_ERROR(cudaGetLastError());
+
+}
+
+void gpuMeans(const BRG_IMAGE & image, uint cols, uint rows, uint * initialFeaturePos, uint K, BRG_IMAGE & output)
+{
+    BRG_IMAGE d_image;
+    BRG_IMAGE d_output;
+
+    BRG * d_kMeans;
+    BRG * h_kMeans = new BRG[K];
+    
+    int length = cols * rows;
+
+    CHECK_ERROR(cudaMalloc(&d_image.g, sizeof(uchar) * length));    
+    CHECK_ERROR(cudaMalloc(&d_image.r, sizeof(uchar) * length));    
+    CHECK_ERROR(cudaMalloc(&d_image.b, sizeof(uchar) * length));    
+
+    CHECK_ERROR(cudaMalloc(&d_output.g, sizeof(uchar) * length));    
+    CHECK_ERROR(cudaMalloc(&d_output.r, sizeof(uchar) * length));    
+    CHECK_ERROR(cudaMalloc(&d_output.b, sizeof(uchar) * length));    
+
+    CHECK_ERROR(cudaMalloc(&d_kMeans, sizeof(BRG) * K));    
+
+    CHECK_ERROR(cudaMemcpy(d_image.g, image.g, sizeof(uchar) * length, cudaMemcpyHostToDevice));
+    CHECK_ERROR(cudaMemcpy(d_image.r, image.r, sizeof(uchar) * length, cudaMemcpyHostToDevice));
+    CHECK_ERROR(cudaMemcpy(d_image.b, image.b, sizeof(uchar) * length, cudaMemcpyHostToDevice));
+
+    for(int i = 0; i < K ; i++)
+    {
+        uint initCol = initialFeaturePos[2 * i];
+        uint initRow = initialFeaturePos[2 * i + 1];
+
+        h_kMeans[i].b = image.b[initCol + initRow * cols];
+        h_kMeans[i].r = image.r[initCol + initRow * cols];
+        h_kMeans[i].g = image.g[initCol + initRow * cols];
+    }
+
+    CHECK_ERROR(cudaMemcpy(d_kMeans, h_kMeans, sizeof(BRG) * K, cudaMemcpyHostToDevice));
+
+    gpuAlgo(d_image, d_kMeans, K, cols, rows, d_output);
+
+    CHECK_ERROR(cudaMemcpy(output.r, d_output.r, sizeof(uchar) * length, cudaMemcpyDeviceToHost));
+    CHECK_ERROR(cudaMemcpy(output.g, d_output.g, sizeof(uchar) * length, cudaMemcpyDeviceToHost));
+    CHECK_ERROR(cudaMemcpy(output.b, d_output.b, sizeof(uchar) * length, cudaMemcpyDeviceToHost));
+
 }
 
 void cpuKMeans(const BRG_IMAGE & image, uint cols, uint rows, uint * initialFeaturePos, uint K, BRG_IMAGE & output)
@@ -202,7 +342,8 @@ bool processImage(const BRG_IMAGE & image, uint cols, uint rows, BRG_IMAGE & out
     memset(cpuOut.r, 255, length * sizeof(uchar));
     memset(cpuOut.b, 255, length * sizeof(uchar));
 
-    cpuKMeans(image, cols, rows, initialFeaturePos, K, cpuOut);
+    //cpuKMeans(image, cols, rows, initialFeaturePos, K, cpuOut);
+    gpuMeans(image, cols, rows, initialFeaturePos, K, cpuOut);
 
     outputImage = cpuOut;
 

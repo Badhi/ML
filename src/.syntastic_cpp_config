@@ -1,1 +1,2 @@
 -I/x01/bhashithaa/opencv/build/include
+-I/usr/local/cuda/targets/x86_64-linux/include/
